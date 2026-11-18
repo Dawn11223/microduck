@@ -243,6 +243,13 @@ pub const KNEE_IDS: [u8; 2] = [13, 23];
 /// calibrated in. `DEFAULT_POSITION` itself is untouched: it is the training convention and a
 /// policy observes joint positions *relative* to it.
 ///
+/// **The head chain was permuted too (2026-11-18).** [`JOINT_IDS`] now assigns this machine's
+/// real IDs to the head joints, so each head ID serves a different official role than upstream
+/// assumes. `homing_offset` is keyed by ID, so those five values had to move with it: the
+/// offset is `HOME(this ID's official role) − raw at the calibration pose`, and the role's home
+/// value changed by ±228 counts (2276 for a pitch joint, 2048 for yaw/roll/mouth). The `//`
+/// comment on each arm names the physical joint, which is what the ID now drives.
+///
 /// This table is hardware, not software. Re-calibrating the robot means editing these numbers
 /// and rebuilding; nothing in `robotd.toml` can override them, because a mismatch here is
 /// exactly what this assertion exists to catch.
@@ -258,11 +265,12 @@ pub fn homing_offset(id: u8) -> i32 {
         22 => -397, // left_hip_pitch
         23 => -445, // left_knee   (connector re-seated 90° on 2026-11-18)
         24 => 560,  // left_ankle
-        30 => 230,  // neck_pitch
-        31 => 226,  // head_pitch
-        32 => 2,    // head_yaw
-        33 => 6,    // head_roll
-        34 => -57,  // mouth
+        // Head chain: IDs are wired differently from the official build — see [`JOINT_IDS`].
+        30 => 2,   // mouth        (was neck_pitch's home value; re-based −228)
+        31 => -2,  // head_yaw     (re-based −228)
+        32 => 2,   // head_roll    (unchanged: 2048 on both sides)
+        33 => 234, // head_pitch   (re-based +228)
+        34 => 215, // neck_pitch   (re-based +228, then +44 for the forward-lean correction)
         _ => 0,
     }
 }

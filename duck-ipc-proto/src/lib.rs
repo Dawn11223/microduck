@@ -800,7 +800,17 @@ pub const JOINT_NAMES: [&str; 15] = [
 /// the ones a client names are one table.
 pub const JOINT_IDS: [u8; 15] = [
     20, 21, 22, 23, 24, // left leg
-    30, 31, 32, 33, 34, // neck, head, mouth
+    // **PATCHED for this hand-assembled duck (2026-11-18).** The head chain on this machine is
+    // wired with different IDs than the official build: measured by nudging each servo in turn,
+    // ID 34 is the lower neck servo, 33 the upper (pitch), 31 the yaw, 32 the roll, and 30 the
+    // mouth. Upstream's order (30, 31, 32, 33, 34) would hand the policy's neck action to the
+    // mouth and read the mouth's angle as the neck's — observation and action wrong together,
+    // which is silent rather than obviously broken.
+    //
+    // Permuting this table is the whole fix: no arithmetic anywhere else in the tree derives a
+    // joint from an ID, and `bus.rs` drives whatever order this holds. The `homing_offset` table
+    // in `duck-control` is keyed by ID and follows the same permutation.
+    34, 33, 31, 32, 30, // neck, head pitch, head yaw, head roll, mouth
     10, 11, 12, 13, 14, // right leg
 ];
 
