@@ -218,22 +218,52 @@ impl ImpactGuard {
 
 /// `homing_offset` on the knees, in raw position counts (0.088° each, so −45°).
 ///
-/// Every other joint is at 0. The value is `microduck_runtime`'s `setup_motor_rpi.py`, the
-/// flashing rig every servo on a built robot went through, so [`DEFAULT_POSITION`] and every
-/// policy assume it. A servo straight from the box arrives at 0, so a knee adopted without this
-/// reads and drives 45° off, with nothing in the journal to say why.
+/// What `microduck_runtime`'s `setup_motor_rpi.py` flashing rig parked every servo on a built
+/// robot at. Kept here because it documents the factory convention and it is what
+/// [`homing_offset`] would return on an officially assembled duck — **not** what it returns on
+/// this one, which carries its own measured table. See [`homing_offset`].
 pub const KNEE_HOMING_OFFSET: i32 = -512;
 
-/// Right and left knee: the only joints whose `homing_offset` is not 0.
+/// Right and left knee: the joints the factory rig parked at −45°. Retained for reference; the
+/// measured table in [`homing_offset`] does not branch on them.
 pub const KNEE_IDS: [u8; 2] = [13, 23];
 
 /// The `homing_offset` a servo should hold, asserted alongside [`EXPECTED_REGISTERS`]. It is
 /// kept apart from them because it is an `i32` and differs per joint.
+///
+/// **PATCHED for this hand-assembled duck (2026-11-18).** Upstream returns
+/// [`KNEE_HOMING_OFFSET`] on the knees and 0 everywhere else, which assumes the servo horns
+/// were seated the way the official flashing rig seats them. Ours were not: the measured
+/// deviation between this assembly and that convention runs from −53° to +46°, so the stock
+/// values would rewrite every servo at startup and shift the physical pose by that much — by
+/// up to 96° on one knee, which is a fall and possibly a broken gear.
+///
+/// These are the values measured on this machine (`/var/lib/duck/poses/homing-RED-LINE.json`),
+/// and they are what make `Present` equal [`DEFAULT_POSITION`] in the stance the robot was
+/// calibrated in. `DEFAULT_POSITION` itself is untouched: it is the training convention and a
+/// policy observes joint positions *relative* to it.
+///
+/// This table is hardware, not software. Re-calibrating the robot means editing these numbers
+/// and rebuilding; nothing in `robotd.toml` can override them, because a mismatch here is
+/// exactly what this assertion exists to catch.
 pub fn homing_offset(id: u8) -> i32 {
-    if KNEE_IDS.contains(&id) {
-        KNEE_HOMING_OFFSET
-    } else {
-        0
+    match id {
+        10 => -23,  // right_hip_yaw
+        11 => 14,   // right_hip_roll
+        12 => 513,  // right_hip_pitch
+        13 => -592, // right_knee
+        14 => -608, // right_ankle
+        20 => -13,  // left_hip_yaw
+        21 => -12,  // left_hip_roll
+        22 => -397, // left_hip_pitch
+        23 => -445, // left_knee   (connector re-seated 90° on 2026-11-18)
+        24 => 560,  // left_ankle
+        30 => 230,  // neck_pitch
+        31 => 226,  // head_pitch
+        32 => 2,    // head_yaw
+        33 => 6,    // head_roll
+        34 => -57,  // mouth
+        _ => 0,
     }
 }
 
@@ -426,16 +456,19 @@ mod tests {
 
     /// The knee IDs are positional facts about [`JOINT_IDS`]; a renumbering that moved them
     /// would put the offset on a hip.
+    ///
+    /// This duck carries a measured offset on every joint rather than the factory's
+    /// knees-only convention, so what is worth asserting is that the table still reaches the
+    /// knees at all — a `match` arm that fell off during a rebase would silently zero one.
     #[test]
-    fn only_the_knees_have_a_homing_offset() {
+    fn the_knees_carry_a_homing_offset() {
         for (i, &id) in JOINT_IDS.iter().enumerate() {
-            let want = if JOINT_NAMES[i].ends_with("_knee") {
-                KNEE_HOMING_OFFSET
-            } else {
-                0
-            };
-            assert_eq!(homing_offset(id), want, "{}", JOINT_NAMES[i]);
+            if JOINT_NAMES[i].ends_with("_knee") {
+                assert_ne!(homing_offset(id), 0, "{}", JOINT_NAMES[i]);
+            }
         }
+        assert_eq!(homing_offset(0), 0, "an id that is not a joint must be 0");
+        assert_eq!(homing_offset(200), 0, "the imu board must be 0");
     }
 
     /// `MOUTH_INDEX` is used to skip a slot when mapping 14 policy actions onto 15 joints.
