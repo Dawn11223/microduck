@@ -8,7 +8,7 @@ name: build-robotd-aarch64
 # need the team signing key to go through `updaterd`.
 #
 # Pinned to the `daemon-v0.22.0` source so the binary matches the daemons installed from that
-# release — `robotd` talks JSON-RPC to `configd` and `robotctl`, and a different commit could
+# release -- `robotd` talks JSON-RPC to `configd` and `robotctl`, and a different commit could
 # disagree about the wire format.
 
 on:
@@ -32,14 +32,14 @@ jobs:
           toolchain: "1.89.0"
           targets: aarch64-unknown-linux-gnu
 
+      # libc6-dev-arm64-cross supplies crti.o and the aarch64 headers. With
+      # --no-install-recommends the compiler package does not pull it in on its own, and the
+      # link then fails with "cannot find crti.o".
       - name: Cross linker
         run: |
           sudo apt-get update
-          # libc6-dev-arm64-cross is what supplies crti.o and the aarch64 headers; with
-# --no-install-recommends it is not pulled in by the compiler package alone, and the
-# link then fails with "cannot find crti.o".
           sudo apt-get install -y --no-install-recommends \
-            gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross
 
       - name: Cache cargo and target
         uses: actions/cache@v4
@@ -70,11 +70,11 @@ jobs:
           BIN=target/aarch64-unknown-linux-gnu/release/robotd
           ls -lh "$BIN"
           file "$BIN"
-          echo "--- NEEDED (必须不含 onnxruntime / gstreamer / udev) ---"
+          echo "--- NEEDED (must not list onnxruntime / gstreamer / udev) ---"
           aarch64-linux-gnu-objdump -p "$BIN" | grep NEEDED || true
-          echo "--- 需要的最高 glibc 符号版本（板子是 2.41）---"
+          echo "--- highest glibc symbol version (board is 2.41) ---"
           aarch64-linux-gnu-objdump -T "$BIN" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -8
-          echo "--- 确认补丁在源码里 ---"
+          echo "--- confirm the patch is in the source ---"
           grep -n -A4 'pub fn homing_offset' duck-control/src/model.rs | head -8
 
       - uses: actions/upload-artifact@v4
