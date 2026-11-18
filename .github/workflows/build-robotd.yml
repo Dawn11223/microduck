@@ -1,0 +1,81 @@
+name: build-robotd-aarch64
+
+# Builds one binary for the robot board: `robotd`, with this duck's measured homing offsets
+# patched into `duck-control/src/model.rs`.
+#
+# Deliberately not a release build: nothing is signed and nothing is published. The artifact is
+# copied to the board by hand and started through a systemd drop-in, because `dev-push.sh` would
+# need the team signing key to go through `updaterd`.
+#
+# Pinned to the `daemon-v0.22.0` source so the binary matches the daemons installed from that
+# release — `robotd` talks JSON-RPC to `configd` and `robotctl`, and a different commit could
+# disagree about the wire format.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [duck-0.22.0-patched]
+
+jobs:
+  build:
+    # Pinned rather than `ubuntu-latest`: the runner's glibc becomes the binary's floor, and a
+    # silent bump is the kind of thing that links here and dies on the board.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust 1.89.0 + aarch64 target
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.89.0"
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Cross linker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu
+
+      - name: Cache cargo and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: robotd-aarch64-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            robotd-aarch64-
+
+      # Only this package. The workspace's other members need C libraries that `robotd` does
+      # not: `padd` binds libudev through gilrs and `mediad` needs GStreamer. `robotd` pulls
+      # neither, `serialport` is built with default-features off (which drops libudev), and
+      # `ort` uses `load-dynamic` so no target-arch ONNX Runtime is needed at build time.
+      - name: cargo build -p robotd
+        env:
+          # The repo's `.cargo/config.toml` only defines the `board` alias, no linker, so the
+          # cross linker has to come from here.
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: |
+          cargo build --release --locked -p robotd --target aarch64-unknown-linux-gnu
+
+      - name: Inspect the artifact
+        run: |
+          BIN=target/aarch64-unknown-linux-gnu/release/robotd
+          ls -lh "$BIN"
+          file "$BIN"
+          echo "--- NEEDED (必须不含 onnxruntime / gstreamer / udev) ---"
+          aarch64-linux-gnu-objdump -p "$BIN" | grep NEEDED || true
+          echo "--- 需要的最高 glibc 符号版本（板子是 2.41）---"
+          aarch64-linux-gnu-objdump -T "$BIN" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -8
+          echo "--- 确认补丁在源码里 ---"
+          grep -n -A4 'pub fn homing_offset' duck-control/src/model.rs | head -8
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: robotd-aarch64-${{ github.sha }}
+          path: target/aarch64-unknown-linux-gnu/release/robotd
+          if-no-files-found: error
+          retention-days: 30
