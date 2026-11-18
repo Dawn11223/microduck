@@ -35,7 +35,11 @@ jobs:
       - name: Cross linker
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu
+          # libc6-dev-arm64-cross is what supplies crti.o and the aarch64 headers; with
+# --no-install-recommends it is not pulled in by the compiler package alone, and the
+# link then fails with "cannot find crti.o".
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu libc6-dev-arm64-cross
 
       - name: Cache cargo and target
         uses: actions/cache@v4
