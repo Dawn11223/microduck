@@ -129,10 +129,15 @@ pub const EXPECTED_REGISTERS: &[(&str, u8)] = &[
 ];
 
 /// `current_limit`, mA, asserted alongside [`EXPECTED_REGISTERS`] and kept apart because it is a
-/// `u16`. The XL330 ships at 1750. 1000 is what a microduck walks the same ONNX with, and what the
-/// gear-breakage bench ran ROBOTIS's impact guard firmware at; that firmware is the one that
-/// enforces it in position control, the factory's only does so in the current-based modes.
-pub const CURRENT_LIMIT_MA: u16 = 1000;
+/// `u16`. The XL330 ships at 1750, and that is the default here.
+///
+/// Upstream pinned 1000: what a microduck walks the same ONNX with, and what the gear-breakage
+/// bench ran ROBOTIS's impact guard firmware at — that firmware being the one that enforces it in
+/// position control, where the factory's only does so in the current-based modes. On this
+/// hand-assembled robot 1000 was demonstrably too low: a gait test measured 16.2 deg of tracking
+/// error at 1000 against 5.8 deg at 1750, and with the leg free the servos pull 1305 mA peaks.
+/// So the default is the factory value, and `bus.current_limit_ma` turns it down again.
+pub const CURRENT_LIMIT_MA: u16 = 1750;
 
 /// `firmware_version` of ROBOTIS's impact guard firmwares, V3 and V4: a servo that hits something
 /// brakes and then holds softly, which is what keeps the gear teeth whole. Their settings are

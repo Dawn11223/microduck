@@ -132,6 +132,8 @@ pub struct DynamixelIo {
     fast_sync_read: bool,
     /// `bus.impact_guard*`: the settings the register check asserts on the guard's firmwares.
     impact_guard: ImpactGuard,
+    /// `bus.current_limit_ma`: the `current_limit` and `goal_current` the register check asserts.
+    current_limit_ma: u16,
     /// Servos on [`IMPACT_GUARD_ENABLE_FIRMWARE`], found by the register check: every torque on
     /// sets their guard switch first.
     guard_switch: Vec<u8>,
@@ -158,6 +160,7 @@ impl DynamixelIo {
             ids,
             fast_sync_read,
             impact_guard: ImpactGuard::DEFAULT,
+            current_limit_ma: CURRENT_LIMIT_MA,
             guard_switch: Vec::new(),
             imu: SflpDecoder::default(),
             stale_imu: StaleImuTracker::default(),
@@ -168,6 +171,12 @@ impl DynamixelIo {
     /// otherwise, or [`ImpactGuard::OFF`]. Applied by [`Self::check_registers`], so call it before.
     pub fn set_impact_guard(&mut self, guard: ImpactGuard) {
         self.impact_guard = guard;
+    }
+
+    /// The `current_limit` and `goal_current` `robotd.toml` asks for, mA. Applied by
+    /// [`Self::check_registers`], so call it before.
+    pub fn set_current_limit(&mut self, ma: u16) {
+        self.current_limit_ma = ma;
     }
 
     /// The body IMU's sensor→trunk mount, which is the robot's ([`SflpDecoder::DEFAULT_MOUNT`]
@@ -266,13 +275,14 @@ impl DynamixelIo {
                 expected: 1,
                 got: 0,
             })?;
-        if got != CURRENT_LIMIT_MA {
+        let want_ma = self.current_limit_ma;
+        if got != want_ma {
             if self.torque_on(id)? {
                 tracing::warn!(
                     id,
                     register = "current_limit",
                     got,
-                    want = CURRENT_LIMIT_MA,
+                    want = want_ma,
                     "torque is on; correcting at the next start"
                 );
             } else {
@@ -280,18 +290,18 @@ impl DynamixelIo {
                     id,
                     register = "current_limit",
                     got,
-                    want = CURRENT_LIMIT_MA,
+                    want = want_ma,
                     "correcting motor register"
                 );
                 self.controller
-                    .write_current_limit(id, CURRENT_LIMIT_MA)
+                    .write_current_limit(id, want_ma)
                     .map_err(|e| IoError::Bus(format!("write current_limit on {id}: {e}")))?;
                 std::thread::sleep(EEPROM_SETTLE);
                 // Position control caps the current at Goal Current, which takes Current Limit
                 // only at boot or on a mode change: without this the new limit waits for the
                 // next power cycle.
                 self.controller
-                    .write_goal_current(id, CURRENT_LIMIT_MA as i16)
+                    .write_goal_current(id, want_ma as i16)
                     .map_err(|e| IoError::Bus(format!("write goal_current on {id}: {e}")))?;
                 fixed += 1;
             }

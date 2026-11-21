@@ -1777,6 +1777,7 @@ fn open_bus(
     }
     let guard = impact_guard(bus);
     io.set_impact_guard(guard);
+    io.set_current_limit(bus.current_limit_ma);
     if !bus.impact_guard && loud {
         tracing::info!("bus.impact_guard is off; guard servos run as the factory firmware");
     } else if guard != duck_control::model::ImpactGuard::DEFAULT && loud {

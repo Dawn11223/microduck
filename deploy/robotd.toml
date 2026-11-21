@@ -48,6 +48,16 @@ port = "/dev/ttyS2"
 # this line. Needs a robotd restart.
 # fast_sync_read = true
 
+# `current_limit` and `goal_current`, mA, written to every servo at startup. The XL330 ships
+# at 1750, which is the default. Upstream pinned 1000 — what a microduck walks the same ONNX
+# with, and what the gear-breakage bench ran ROBOTIS's impact guard firmware at — but on this
+# hand-assembled robot that was too low to move the legs: a gait test measured 16.2 deg of
+# tracking error at 1000 against 5.8 deg at 1750, and with a leg free the servos pull 1305 mA
+# peaks. Lower it rather than raising it. This robot runs the factory firmware, which does not
+# enforce a limit in position control at all, so this number is the only thing between a
+# stalled joint and its gear teeth. Needs a robotd restart.
+# current_limit_ma = 1750
+
 # The impact guard on servos running ROBOTIS's impact guard firmwares (V3 and V4,
 # firmware_version 3 and 4):
 # a servo that arrives faster than 6 rad/s and hits something brakes 20 ms, and its PWM limit

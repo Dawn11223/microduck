@@ -3039,6 +3039,21 @@ pub struct Bus {
     /// the bus drops, `update_gate` sees an unhealthy robot, and a release that turned this on
     /// against firmware that cannot do it is rolled back on its own.
     pub fast_sync_read: bool,
+    /// `current_limit` and `goal_current`, mA, written to every servo at startup.
+    ///
+    /// Upstream pins this at 1000, which is what a microduck walks the same ONNX with on a
+    /// machine whose servos were seated by the factory rig. On this hand-assembled robot that
+    /// turned out to be the difference between standing and not: with the leg free the servos
+    /// pull peaks of 1305 mA and reach 930 deg/s, and at 1000 they complete about a quarter of
+    /// a commanded knee bend under load -- a gait test measured 16.2 deg of tracking error at
+    /// 1000 against 5.8 deg at 1750, the factory value.
+    ///
+    /// Defaults to that factory value, so a robot whose mechanics are tighter than this one
+    /// loses nothing by it. Lower it rather than raising it: 1000 is what the gear-breakage
+    /// bench ran ROBOTIS's impact guard firmware at, and this robot runs the factory firmware,
+    /// which does not enforce a limit in position control at all -- so the number here is the
+    /// only thing standing between a stalled joint and its gear teeth.
+    pub current_limit_ma: u16,
     /// The impact guard on servos running ROBOTIS's impact guard firmwares (V3, V4): a servo that
     /// hits something brakes, then holds softly, and its PWM limit falls with speed — the fix for
     /// broken gear teeth. **Off by default** until it is understood why a stress test robot on it
@@ -3188,6 +3203,7 @@ impl Default for Bus {
         Self {
             port: "/dev/ttyS2".into(),
             fast_sync_read: true,
+            current_limit_ma: 1750,
             impact_guard: false,
             battery_voltage_based_pwm_limit: false,
             impact_guard_v_min: 6,
