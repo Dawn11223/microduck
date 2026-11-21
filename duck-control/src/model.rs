@@ -274,8 +274,8 @@ pub fn homing_offset(id: u8) -> i32 {
         30 => 2,   // mouth        (was neck_pitch's home value; re-based −228)
         31 => -2,  // head_yaw     (re-based −228)
         32 => 2,   // head_roll    (unchanged: 2048 on both sides)
-        33 => 234, // head_pitch   (re-based +228)
-        34 => 273, // neck_pitch   (re-based +228, then +58 for the forward-lean correction)
+        33 => 450, // head_pitch   (re-based +228, then +216 for the head-pose change)
+        34 => 369, // neck_pitch   (re-based +228, then +96 for the head-pose change)
         _ => 0,
     }
 }
