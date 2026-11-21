@@ -260,16 +260,19 @@ pub const KNEE_IDS: [u8; 2] = [13, 23];
 /// exactly what this assertion exists to catch.
 pub fn homing_offset(id: u8) -> i32 {
     match id {
-        10 => -23,  // right_hip_yaw
-        11 => 14,   // right_hip_roll
-        12 => 513,  // right_hip_pitch
-        13 => -592, // right_knee
-        14 => -608, // right_ankle
-        20 => -13,  // left_hip_yaw
-        21 => -12,  // left_hip_roll
-        22 => -397, // left_hip_pitch
-        23 => -445, // left_knee   (connector re-seated 90° on 2026-11-18)
-        24 => 560,  // left_ankle
+        // The four leg joints below were re-based on 2026-11-21, onto the stance the operator
+        // dialled in by hand while matching the official initial pose. Old values in order:
+        // 14 / 513 / -12 / -397.
+        10 => -23,   // right_hip_yaw
+        11 => 150,   // right_hip_roll
+        12 => 482,   // right_hip_pitch
+        13 => -592,  // right_knee
+        14 => -608,  // right_ankle
+        20 => -13,   // left_hip_yaw
+        21 => -126,  // left_hip_roll
+        22 => -338,  // left_hip_pitch
+        23 => -445,  // left_knee   (connector re-seated 90° on 2026-11-18)
+        24 => 560,   // left_ankle
         // Head chain: IDs are wired differently from the official build — see [`JOINT_IDS`].
         30 => 2,   // mouth        (was neck_pitch's home value; re-based −228)
         31 => -2,  // head_yaw     (re-based −228)
