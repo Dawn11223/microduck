@@ -9,7 +9,7 @@
 //!
 //! | bytes | contents |
 //! |---|---|
-//! | 0..6  | gyro x/y/z, `i16` LE raw counts, ±500 dps |
+//! | 0..6  | gyro x/y/z, `i16` LE raw counts, `counts / 16.4 = °/s` (±2000 dps full scale) |
 //! | 6..12 | SFLP quaternion x/y/z as IEEE half-precision; `w = √(1 − x² − y² − z²)` |
 //!
 //! The board's full diagnostic block is 20 bytes (it also carries raw accelerometer, a
@@ -44,8 +44,12 @@ impl Default for ImuData {
     }
 }
 
-/// ±500 dps at 17.5 mdps/LSB, in rad/s.
-const GYRO_RAD_PER_LSB: f64 = 0.0175 * std::f64::consts::PI / 180.0;
+/// The board reports `counts / 16.4 = °/s` (IMU-DXL PROTOCOL.md §5), i.e. 1 LSB =
+/// 60.98 mdps over a ±2000 dps span — in rad/s. Assuming the chip's ±500 dps sensitivity
+/// (17.5 mdps/LSB) here made every rate read 3.5× too small: measured against the fused
+/// quaternion over static→rotated→static plateaus the true factor is 3.50 ± 0.05 on all
+/// three axes, with no cross-axis mixing.
+const GYRO_RAD_PER_LSB: f64 = (1.0 / 16.4) * std::f64::consts::PI / 180.0;
 
 /// Decodes the board's block into [`ImuData`].
 ///

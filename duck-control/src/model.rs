@@ -274,12 +274,12 @@ pub fn homing_offset(id: u8) -> i32 {
         10 => 85,   // right_hip_yaw
         11 => 49,   // right_hip_roll
         12 => 566,  // left_knee         (crossed with the right hip pitch; was right_hip_pitch)
-        13 => -407, // left_hip_pitch    (was right_knee)
+        13 => -463, // left_hip_pitch    (was right_knee; re-dialled twice on 2026-11-23)
         14 => -605, // right_ankle
         20 => 30,   // left_hip_yaw
         21 => -82,  // left_hip_roll
         22 => -501, // right_knee        (was left_hip_pitch)
-        23 => -514, // right_hip_pitch   (was left_knee)
+        23 => -455, // right_hip_pitch   (was left_knee; re-dialled twice on 2026-11-23)
         24 => 605,  // left_ankle
         // Head chain: IDs are wired differently from the official build — see [`JOINT_IDS`].
         30 => 2,   // mouth        (was neck_pitch's home value; re-based −228)
