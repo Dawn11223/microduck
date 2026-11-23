@@ -229,8 +229,9 @@ impl ImpactGuard {
 /// this one, which carries its own measured table. See [`homing_offset`].
 pub const KNEE_HOMING_OFFSET: i32 = -512;
 
-/// Right and left knee: the joints the factory rig parked at −45°. Retained for reference; the
-/// measured table in [`homing_offset`] does not branch on them.
+/// Right and left knee: the IDs the factory rig parked at −45°. Retained for reference; the
+/// measured table in [`homing_offset`] does not branch on them. On this machine the knees are
+/// IDs 12 and 22, not these — see the 2026-11-23 leg re-order in [`crate::JOINT_IDS`].
 pub const KNEE_IDS: [u8; 2] = [13, 23];
 
 /// The `homing_offset` a servo should hold, asserted alongside [`EXPECTED_REGISTERS`]. It is
@@ -260,21 +261,26 @@ pub const KNEE_IDS: [u8; 2] = [13, 23];
 /// exactly what this assertion exists to catch.
 pub fn homing_offset(id: u8) -> i32 {
     match id {
-        // The leg joints below were re-based on 2026-11-21, onto the stance the operator
-        // dialled in by hand while matching the official initial pose. Old values, in the
-        // order the joints were re-based: 11/12/21/22 held 14 / 513 / -12 / -397, the left
-        // knee held -445 (-80 counts off home), the ankles held -608 / +560 (-47 / +26
-        // counts off home), and the hip pitch pair held 482 / -338 (+83 / -98 counts).
-        10 => -23,   // right_hip_yaw
-        11 => 150,   // right_hip_roll
-        12 => 399,   // right_hip_pitch
-        13 => -592,  // right_knee
-        14 => -561,  // right_ankle
-        20 => -13,   // left_hip_yaw
-        21 => -126,  // left_hip_roll
-        22 => -240,  // left_hip_pitch
-        23 => -365,  // left_knee   (connector re-seated 90° on 2026-11-18)
-        24 => 534,   // left_ankle
+        // **The legs were re-based again on 2026-11-23**, after the thigh/shank link lengths
+        // were found crossed and corrected, and after the hip pitch and knee servos were found
+        // cross-wired between the legs. Every one of the ten leg offsets moved, because the
+        // previous table had been calibrated against the *old* link geometry: the stance that
+        // looks like the official pose needs different joint angles once the links are right.
+        // The knees are now 12 and 22, so their offsets are not the ones a factory table would
+        // expect there.
+        //
+        // The previous generation, for reference: 10..14 held −23 / 150 / 399 / −592 / −561 and
+        // 20..24 held −13 / −126 / −240 / −365 / 534, keyed to the pre-swap roles.
+        10 => 85,   // right_hip_yaw
+        11 => 49,   // right_hip_roll
+        12 => 566,  // left_knee         (crossed with the right hip pitch; was right_hip_pitch)
+        13 => -407, // left_hip_pitch    (was right_knee)
+        14 => -605, // right_ankle
+        20 => 30,   // left_hip_yaw
+        21 => -82,  // left_hip_roll
+        22 => -501, // right_knee        (was left_hip_pitch)
+        23 => -514, // right_hip_pitch   (was left_knee)
+        24 => 605,  // left_ankle
         // Head chain: IDs are wired differently from the official build — see [`JOINT_IDS`].
         30 => 2,   // mouth        (was neck_pitch's home value; re-based −228)
         31 => -2,  // head_yaw     (re-based −228)
