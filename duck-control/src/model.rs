@@ -297,11 +297,22 @@ pub fn homing_offset(id: u8) -> i32 {
         23 => -81,  // left_hip_pitch   (re-dialled from the operator's stance)
         24 => 5,    // right_ankle
         // Head chain: IDs are wired differently from the official build — see [`JOINT_IDS`].
-        30 => 2,   // mouth        (was neck_pitch's home value; re-based −228)
-        31 => -2,  // head_yaw     (re-based −228)
-        32 => 2,   // head_roll    (unchanged: 2048 on both sides)
-        33 => 450, // head_pitch   (re-based +228, then +216 for the head-pose change)
-        34 => 369, // neck_pitch   (re-based +228, then +96 for the head-pose change)
+        //
+        // **Both pitch joints were mounted backwards** (found 2026-11-24 with
+        // `ducktune signs`, which walks each joint +15 deg and prints what the MJCF says it
+        // should do). At +15 deg the neck pitched the head *down* and the head-pitch joint
+        // lifted it *up*, the opposite of the model, so the two links were re-fitted the other
+        // way round and the offsets re-folded against the new mounting (+450 → +2,
+        // +369 → +9). Directions now match: +20 deg on 33 nods down, on 34 rears up.
+        //
+        // A reversed joint cannot be fixed by an offset — `H` only shifts the coordinate. The
+        // observation and the action would both have been mirrored, which is exactly the class
+        // of fault the leg remap in [`JOINT_IDS`] turned out to be.
+        30 => 2,  // mouth        (was neck_pitch's home value; re-based −228)
+        31 => -2, // head_yaw     (re-based −228)
+        32 => 2,  // head_roll    (unchanged: 2048 on both sides)
+        33 => 2,  // head_pitch   (re-mounted and re-folded; was +450)
+        34 => 9,  // neck_pitch   (re-mounted and re-folded; was +369)
         _ => 0,
     }
 }
