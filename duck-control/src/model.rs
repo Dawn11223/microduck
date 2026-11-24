@@ -263,31 +263,39 @@ pub fn homing_offset(id: u8) -> i32 {
     match id {
         // **The legs changed sides on 2026-11-24.** [`JOINT_IDS`] had the two chains the wrong
         // way round, so each leg servo was being driven with the *other* side's home target.
-        // Fixing the assignment means every affected servo's home value changes by the mirror
-        // difference — 52.4 deg (597 counts) on the hip pitches, 51.9 deg (591) on the ankles,
-        // 10 deg (114) on the rolls, 0.6 deg (6) on the knees — and these offsets absorb exactly
-        // that, so each servo's raw position at the home pose is unchanged and nothing moves when
-        // the new binary starts. Verified against `DEFAULT_POSITION` in counts: L hip pitch 1749.9,
-        // R hip pitch 2346.7, L ankle 2343.5, R ankle 1752.5, L roll 1991.1, R roll 2104.9,
-        // L knee 2044.9, R knee 2051.1.
+        // Fixing the assignment means every affected servo's home value changes with its role's
+        // home value, and these offsets move with it so that each servo's position at the home
+        // pose stays where it was.
         //
-        // The values below are therefore "the offset dialled by hand" plus that shift; the
-        // hand-dialled generation is in the git history of this table (11-23d).
+        // **The ankles are ±2 / +5, not ±1196.** The remap first shifted them by the mirror
+        // difference as if it were `H_old + (HOME_old − HOME_new)`; the correct sign is
+        // `H_new = H_old + (HOME_new − HOME_old)`, which for the ankles is a shift of ±590, not
+        // ∓591 — and the wrong sign put them at ±1196, outside the range below. The firmware
+        // then *ignored* the offset entirely, so the two ankles have been running with no homing
+        // offset at all. They land within 2 and 5 counts of HOME anyway (the stance measured
+        // 83.4 mm wide, 117.5 mm high, 1.3 mm fore-aft — nominal is 83.6 / 117.1 / 0.0), so the
+        // robot was not walking on a wrong stance; the values were simply inert and would have
+        // mis-computed the next fold. Now they are small, legal, and honest.
         //
-        // **Re-dialled once more on 2026-11-24**, on the operator's stance after the remap:
-        // 11 +163 → +10, 13 −1060 → −928, 21 −196 → +1, 23 +142 → −81. Those four were dialled
-        // holds (Goal tracked Present, so commanded, not load sag) of +13.4, −11.0, −16.7 and
-        // +18.6 degrees — a symmetric squat and splay that is now the home pose.
-        10 => 85,   // left_hip_yaw     (was right_hip_yaw; yaw home is 0 on both, so unchanged)
-        11 => 10,   // left_hip_roll    (remapped −114, then re-dialled −153 on 2026-11-24)
-        12 => 560,  // right_knee       (remapped −6)
-        13 => -928, // right_hip_pitch  (remapped −597, then re-dialled +132 on 2026-11-24)
-        14 => -1196, // left_ankle      (remapped −591)
-        20 => 30,   // right_hip_yaw    (was left_hip_yaw; unchanged)
-        21 => 1,    // right_hip_roll   (remapped +114, then re-dialled +197 on 2026-11-24)
-        22 => -495, // left_knee        (remapped +6)
-        23 => -81,  // left_hip_pitch   (remapped +597, then re-dialled −223 on 2026-11-24)
-        24 => 1196, // right_ankle      (remapped +591)
+        // **Never write |offset| > 1024 here.** Homing Offset(20) is only honoured within
+        // ±1,024 counts in Position Control Mode (operating mode 3); outside that the servo
+        // ignores it silently (ROBOTIS e-Manual, XL330-M288, "Homing Offset"). Outside-range
+        // values therefore look applied in EEPROM and do nothing — which is exactly how the
+        // ankles went wrong. `every_homing_offset_is_legal` pins this.
+        //
+        // Re-dialled on 2026-11-24 on the operator's stance: 11 +163 → +10, 13 −1060 → −928,
+        // 21 −196 → +1, 23 +142 → −81. Those four were dialled holds (Goal tracked Present, so
+        // commanded, not load sag) of +13.4, −11.0, −16.7 and +18.6 degrees.
+        10 => 85,   // left_hip_yaw
+        11 => 10,   // left_hip_roll    (re-dialled from the operator's stance)
+        12 => 560,  // right_knee
+        13 => -928, // right_hip_pitch  (re-dialled from the operator's stance)
+        14 => -2,   // left_ankle
+        20 => 30,   // right_hip_yaw
+        21 => 1,    // right_hip_roll   (re-dialled from the operator's stance)
+        22 => -495, // left_knee
+        23 => -81,  // left_hip_pitch   (re-dialled from the operator's stance)
+        24 => 5,    // right_ankle
         // Head chain: IDs are wired differently from the official build — see [`JOINT_IDS`].
         30 => 2,   // mouth        (was neck_pitch's home value; re-based −228)
         31 => -2,  // head_yaw     (re-based −228)
@@ -483,6 +491,27 @@ mod tests {
             "the three faults worth latching on, with input-voltage clear"
         );
         assert_eq!(want & INPUT_VOLTAGE, 0);
+    }
+
+    /// Every offset must be one the servo will actually honour.
+    ///
+    /// Homing Offset(20) is only applied within ±1,024 counts in Position Control Mode
+    /// (operating mode 3, what this robot runs); the firmware **silently ignores** anything
+    /// outside that range while the EEPROM keeps the number, so an out-of-range value looks
+    /// applied in every read-back and does nothing (ROBOTIS e-Manual, XL330-M288, "Homing
+    /// Offset"). Two ankles sat at ±1196 that way on 2026-11-24. This is the check that would
+    /// have caught them, and it is cheap enough to keep.
+    #[test]
+    fn every_homing_offset_is_legal() {
+        const JOINT_MODE_LIMIT: i32 = 1024;
+        for id in 0..=u8::MAX {
+            let offset = homing_offset(id);
+            assert!(
+                offset.abs() <= JOINT_MODE_LIMIT,
+                "servo {id}: homing offset {offset} is outside +-{JOINT_MODE_LIMIT}, \
+                 which the firmware ignores in joint mode"
+            );
+        }
     }
 
     /// The knee IDs are positional facts about [`JOINT_IDS`]; a renumbering that moved them
