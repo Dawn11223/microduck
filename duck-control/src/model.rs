@@ -273,16 +273,21 @@ pub fn homing_offset(id: u8) -> i32 {
         //
         // The values below are therefore "the offset dialled by hand" plus that shift; the
         // hand-dialled generation is in the git history of this table (11-23d).
-        10 => 85,    // left_hip_yaw     (was right_hip_yaw; yaw home is 0 on both, so unchanged)
-        11 => 163,   // left_hip_roll    (was right_hip_roll; +114)
-        12 => 560,   // right_knee       (was left_knee; −6)
-        13 => -1060, // right_hip_pitch  (was left_hip_pitch; −597)
-        14 => -1196, // left_ankle       (was right_ankle; −591)
-        20 => 30,    // right_hip_yaw    (was left_hip_yaw; unchanged)
-        21 => -196,  // right_hip_roll   (was left_hip_roll; −114)
-        22 => -495,  // left_knee        (was right_knee; +6)
-        23 => 142,   // left_hip_pitch   (was right_hip_pitch; +597)
-        24 => 1196,  // right_ankle      (was left_ankle; +591)
+        //
+        // **Re-dialled once more on 2026-11-24**, on the operator's stance after the remap:
+        // 11 +163 → +10, 13 −1060 → −928, 21 −196 → +1, 23 +142 → −81. Those four were dialled
+        // holds (Goal tracked Present, so commanded, not load sag) of +13.4, −11.0, −16.7 and
+        // +18.6 degrees — a symmetric squat and splay that is now the home pose.
+        10 => 85,   // left_hip_yaw     (was right_hip_yaw; yaw home is 0 on both, so unchanged)
+        11 => 10,   // left_hip_roll    (remapped −114, then re-dialled −153 on 2026-11-24)
+        12 => 560,  // right_knee       (remapped −6)
+        13 => -928, // right_hip_pitch  (remapped −597, then re-dialled +132 on 2026-11-24)
+        14 => -1196, // left_ankle      (remapped −591)
+        20 => 30,   // right_hip_yaw    (was left_hip_yaw; unchanged)
+        21 => 1,    // right_hip_roll   (remapped +114, then re-dialled +197 on 2026-11-24)
+        22 => -495, // left_knee        (remapped +6)
+        23 => -81,  // left_hip_pitch   (remapped +597, then re-dialled −223 on 2026-11-24)
+        24 => 1196, // right_ankle      (remapped +591)
         // Head chain: IDs are wired differently from the official build — see [`JOINT_IDS`].
         30 => 2,   // mouth        (was neck_pitch's home value; re-based −228)
         31 => -2,  // head_yaw     (re-based −228)
