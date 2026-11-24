@@ -231,7 +231,7 @@ pub const KNEE_HOMING_OFFSET: i32 = -512;
 
 /// Right and left knee: the IDs the factory rig parked at −45°. Retained for reference; the
 /// measured table in [`homing_offset`] does not branch on them. On this machine the knees are
-/// IDs 12 and 22, not these — see the 2026-11-23 leg re-order in [`crate::JOINT_IDS`].
+/// IDs 22 and 12 (left, right) — see the 2026-11-24 leg re-order in [`crate::JOINT_IDS`].
 pub const KNEE_IDS: [u8; 2] = [13, 23];
 
 /// The `homing_offset` a servo should hold, asserted alongside [`EXPECTED_REGISTERS`]. It is
@@ -261,26 +261,28 @@ pub const KNEE_IDS: [u8; 2] = [13, 23];
 /// exactly what this assertion exists to catch.
 pub fn homing_offset(id: u8) -> i32 {
     match id {
-        // **The legs were re-based again on 2026-11-23**, after the thigh/shank link lengths
-        // were found crossed and corrected, and after the hip pitch and knee servos were found
-        // cross-wired between the legs. Every one of the ten leg offsets moved, because the
-        // previous table had been calibrated against the *old* link geometry: the stance that
-        // looks like the official pose needs different joint angles once the links are right.
-        // The knees are now 12 and 22, so their offsets are not the ones a factory table would
-        // expect there.
+        // **The legs changed sides on 2026-11-24.** [`JOINT_IDS`] had the two chains the wrong
+        // way round, so each leg servo was being driven with the *other* side's home target.
+        // Fixing the assignment means every affected servo's home value changes by the mirror
+        // difference — 52.4 deg (597 counts) on the hip pitches, 51.9 deg (591) on the ankles,
+        // 10 deg (114) on the rolls, 0.6 deg (6) on the knees — and these offsets absorb exactly
+        // that, so each servo's raw position at the home pose is unchanged and nothing moves when
+        // the new binary starts. Verified against `DEFAULT_POSITION` in counts: L hip pitch 1749.9,
+        // R hip pitch 2346.7, L ankle 2343.5, R ankle 1752.5, L roll 1991.1, R roll 2104.9,
+        // L knee 2044.9, R knee 2051.1.
         //
-        // The previous generation, for reference: 10..14 held −23 / 150 / 399 / −592 / −561 and
-        // 20..24 held −13 / −126 / −240 / −365 / 534, keyed to the pre-swap roles.
-        10 => 85,   // right_hip_yaw
-        11 => 49,   // right_hip_roll
-        12 => 566,  // left_knee         (crossed with the right hip pitch; was right_hip_pitch)
-        13 => -463, // left_hip_pitch    (was right_knee; re-dialled twice on 2026-11-23)
-        14 => -605, // right_ankle
-        20 => 30,   // left_hip_yaw
-        21 => -82,  // left_hip_roll
-        22 => -501, // right_knee        (was left_hip_pitch)
-        23 => -455, // right_hip_pitch   (was left_knee; re-dialled twice on 2026-11-23)
-        24 => 605,  // left_ankle
+        // The values below are therefore "the offset dialled by hand" plus that shift; the
+        // hand-dialled generation is in the git history of this table (11-23d).
+        10 => 85,    // left_hip_yaw     (was right_hip_yaw; yaw home is 0 on both, so unchanged)
+        11 => 163,   // left_hip_roll    (was right_hip_roll; +114)
+        12 => 560,   // right_knee       (was left_knee; −6)
+        13 => -1060, // right_hip_pitch  (was left_hip_pitch; −597)
+        14 => -1196, // left_ankle       (was right_ankle; −591)
+        20 => 30,    // right_hip_yaw    (was left_hip_yaw; unchanged)
+        21 => -196,  // right_hip_roll   (was left_hip_roll; −114)
+        22 => -495,  // left_knee        (was right_knee; +6)
+        23 => 142,   // left_hip_pitch   (was right_hip_pitch; +597)
+        24 => 1196,  // right_ankle      (was left_ankle; +591)
         // Head chain: IDs are wired differently from the official build — see [`JOINT_IDS`].
         30 => 2,   // mouth        (was neck_pitch's home value; re-based −228)
         31 => -2,  // head_yaw     (re-based −228)

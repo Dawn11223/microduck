@@ -799,7 +799,7 @@ pub const JOINT_NAMES: [&str; 15] = [
 /// say which joint that is. `duck-control` re-exports it, so the IDs the bus is driven with and
 /// the ones a client names are one table.
 pub const JOINT_IDS: [u8; 15] = [
-    20, 21, 13, 12, 24, // left leg
+    10, 11, 23, 22, 14, // left leg
     // **PATCHED for this hand-assembled duck (2026-11-18).** The head chain on this machine is
     // wired with different IDs than the official build: measured by nudging each servo in turn,
     // ID 34 is the lower neck servo, 33 the upper (pitch), 31 the yaw, 32 the roll, and 30 the
@@ -811,13 +811,21 @@ pub const JOINT_IDS: [u8; 15] = [
     // joint from an ID, and `bus.rs` drives whatever order this holds. The `homing_offset` table
     // in `duck-control` is keyed by ID and follows the same permutation.
     34, 33, 31, 32, 30, // neck, head pitch, head yaw, head roll, mouth
-    // **Legs re-ordered (2026-11-23).** The build crossed the right leg's hip pitch and knee
-    // with the left leg's knee and hip pitch: servo 12 sits at the left knee, 13 at the left
-    // hip pitch, 22 at the right knee, 23 at the right hip pitch. Physical chains measured at
-    // the connectors: right 11-23-22-14, left 21-13-12-24. Left/right here is the robot's own,
-    // which is the opposite side from where it looks like standing in front of it — that
-    // confusion is what made the first description of the fault point at a different swap.
-    10, 11, 23, 22, 14, // right leg
+    // **Legs re-ordered (2026-11-24).** The two chains were on the wrong sides: this build has
+    // servo 10/11/23/22/14 on the duck's *own left* leg and 20/21/13/12/24 on its right, which
+    // is the mirror of what the table said. A left/right swap is not just a mislabel — the two
+    // legs' servos are mounted mirrored, so every one of the ten leg channels was arriving
+    // inverted, and a balance policy given inverted legs pushes itself over. Confirmed two
+    // ways: the head's ToF sits at trunk y = +0.0225 (the model's left) and that side carries
+    // 10-11-23-22-14; and nudging ID 13 by +10 deg swings that foot *forward*, which is what the
+    // model's right_hip_pitch does — not its left_hip_pitch.
+    //
+    // **`homing_offset` shifts with this.** Each servo's home target changes by the mirror
+    // difference (52 deg on the hip pitches, 10 deg on the rolls, 52 on the ankles, 1 on the
+    // knees), so the table there is offset by exactly that much. The pair of changes leaves
+    // every servo's rest position in raw counts untouched: nothing moves at `init`, only the
+    // assignment is corrected.
+    20, 21, 13, 12, 24, // right leg
 ];
 
 /// The joint a Dynamixel ID drives, if it is one of [`JOINT_IDS`].
