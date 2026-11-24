@@ -305,14 +305,20 @@ pub fn homing_offset(id: u8) -> i32 {
         // way round and the offsets re-folded against the new mounting (+450 → +2,
         // +369 → +9). Directions now match: +20 deg on 33 nods down, on 34 rears up.
         //
+        // Then the neck was folded once more (34 +9 → +109) onto the operator's official
+        // stance, which sits the head ~100 counts lower than where the re-fit left it — the
+        // previous pose had the head too far back, moving the centre of mass behind the ankle
+        // axis. Verified after `ducktune home`: Present 2275 against HOME 2276, drawing 12 mA,
+        // so the joint is holding that pose rather than sagging into it.
+        //
         // A reversed joint cannot be fixed by an offset — `H` only shifts the coordinate. The
         // observation and the action would both have been mirrored, which is exactly the class
         // of fault the leg remap in [`JOINT_IDS`] turned out to be.
-        30 => 2,  // mouth        (was neck_pitch's home value; re-based −228)
-        31 => -2, // head_yaw     (re-based −228)
-        32 => 2,  // head_roll    (unchanged: 2048 on both sides)
-        33 => 2,  // head_pitch   (re-mounted and re-folded; was +450)
-        34 => 9,  // neck_pitch   (re-mounted and re-folded; was +369)
+        30 => 2,   // mouth        (was neck_pitch's home value; re-based −228)
+        31 => -2,  // head_yaw     (re-based −228)
+        32 => 2,   // head_roll    (unchanged: 2048 on both sides)
+        33 => 2,   // head_pitch   (re-mounted and re-folded; was +450)
+        34 => 109, // neck_pitch   (re-mounted, re-folded, then onto the official stance)
         _ => 0,
     }
 }
