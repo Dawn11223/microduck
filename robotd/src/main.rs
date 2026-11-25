@@ -1256,6 +1256,11 @@ async fn main() -> ExitCode {
         .with_writer(std::io::stderr)
         .init();
 
+    if let Err(error) = duck_control::diagnostic::start_from_env() {
+        tracing::error!(%error, "diagnostic capture could not start; hardware not opened");
+        return ExitCode::FAILURE;
+    }
+
     let explicit = args.params.is_some();
     let params_path = args
         .params
@@ -2776,6 +2781,7 @@ async fn control_loop<T: RobotIo>(
         let tick_start = Instant::now();
 
         let read_at = proto::clock::monotonic_ns();
+        duck_control::diagnostic::begin_tick(read_at);
         let fresh = match safety.read() {
             Ok(sensors) => {
                 state.consecutive_errors.store(0, Ordering::Relaxed);

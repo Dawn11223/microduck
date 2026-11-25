@@ -1,7 +1,10 @@
 //! Opt-in bench trace. No policy inputs or motor parameters are changed by this module.
-use std::io::Write;
+use std::fs::OpenOptions;
+use std::io::{BufWriter, Write};
+use std::sync::{Arc, OnceLock};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{SyncSender, sync_channel};
+use std::sync::mpsc::{SyncSender, TrySendError, sync_channel};
+use std::time::{Duration, Instant};
 
 use crate::{ACTION_LEN, NUM_JOINTS, OBS_LEN};
 
@@ -20,14 +23,126 @@ struct Sink {
     tx: SyncSender<Stamped>,
     dropped: AtomicU64,
     active: AtomicBool,
+    knees: AtomicBool,
 }
 
 impl Sink {
-    fn try_record(&self, _event: Stamped) {}
+    fn try_record(&self, event: Stamped) {
+        if !self.active.load(Ordering::Relaxed) { return; }
+        match self.tx.try_send(event) {
+            Ok(()) => {},
+            Err(TrySendError::Full(_)) => { self.dropped.fetch_add(1, Ordering::Relaxed); },
+            Err(TrySendError::Disconnected(_)) => { self.active.store(false, Ordering::Relaxed); },
+        }
+    }
 }
 
-fn write_record(out: &mut impl Write, _record: &Stamped) -> std::io::Result<()> {
-    writeln!(out, "{{}}")
+fn write_record(out: &mut impl Write, record: &Stamped) -> std::io::Result<()> {
+    use serde_json::json;
+    let event = match &record.event {
+        Event::BusRead { start_ns, end_ns, ok, raw } => json!({
+            "kind":"bus_read", "start_ns":start_ns,"end_ns":end_ns,"ok":ok,"raw":raw }),
+        Event::KneeRead { start_ns, end_ns, ok, raw } => json!({
+            "kind":"knee_read", "start_ns":start_ns,"end_ns":end_ns,"ok":ok,"raw":raw }),
+        Event::Policy { observation, action, scale, gain } => json!({
+            "kind":"policy", "observation":observation.as_slice(),"action":action,
+            "scale":scale,"gain":gain }),
+        Event::Write { start_ns, end_ns, ok, positions } => json!({
+            "kind":"write", "start_ns":start_ns,"end_ns":end_ns,"ok":ok,"positions":positions }),
+    };
+    serde_json::to_writer(&mut *out, &json!({
+        "tick_ns":record.tick_ns,"event_ns":record.event_ns,"event":event
+    }))?;
+    writeln!(out)
+}
+
+static SINK: OnceLock<Arc<Sink>> = OnceLock::new();
+static TICK_NS: AtomicU64 = AtomicU64::new(0);
+
+pub fn enabled() -> bool {
+    SINK.get().is_some_and(|s| s.active.load(Ordering::Relaxed))
+}
+
+pub fn knee_read_enabled() -> bool {
+    enabled() && SINK.get().is_some_and(|s| s.knees.load(Ordering::Relaxed))
+}
+
+/// A failed optional transaction is recorded once, then disabled to avoid repeated timeouts.
+pub fn disable_knee_reads() {
+    if let Some(s) = SINK.get() { s.knees.store(false, Ordering::Relaxed); }
+}
+
+pub fn begin_tick(tick_ns: u64) {
+    if enabled() { TICK_NS.store(tick_ns, Ordering::Relaxed); }
+}
+
+pub fn now_ns() -> u64 { duck_ipc_proto::clock::monotonic_ns() }
+
+pub fn record(event: Event) {
+    if let Some(sink) = SINK.get() {
+        sink.try_record(Stamped { tick_ns: TICK_NS.load(Ordering::Relaxed), event_ns: now_ns(), event });
+    }
+}
+
+/// Called before hardware is opened. Absent DUCK_TRACE_PATH is the ordinary production path.
+/// Files must be new; an old capture is never overwritten. Serialization and disk writes all
+/// happen on the worker. The control thread only copies fixed arrays into a bounded queue.
+pub fn start_from_env() -> std::io::Result<()> {
+    let Some(path) = std::env::var_os("DUCK_TRACE_PATH") else { return Ok(()); };
+    let seconds = std::env::var("DUCK_TRACE_SECONDS").ok()
+        .and_then(|s| s.parse::<u64>().ok()).unwrap_or(900).clamp(1, 3600);
+    let knees = std::env::var("DUCK_TRACE_KNEES").is_ok_and(|v| v == "1");
+    let file = OpenOptions::new().write(true).create_new(true).open(path)?;
+    let mut out = BufWriter::with_capacity(256 * 1024, file);
+    serde_json::to_writer(&mut out, &serde_json::json!({
+        "kind":"meta", "schema":1, "monotonic_ns":now_ns(),
+        "realtime_ns":duck_ipc_proto::clock::realtime_ns(),
+        "joint_ids":crate::JOINT_IDS, "joint_names":crate::JOINT_NAMES,
+        "raw_bus_ids":std::iter::once(200).chain(crate::JOINT_IDS).collect::<Vec<_>>(),
+        "raw_bus_address":124,"raw_bus_length":12,
+        "knee_ids":[12,22],"knee_address":116,"knee_length":32,
+        "knees_enabled":knees, "duration_s":seconds,
+        "write_ok_means":"host transmission succeeded; knee Goal is independent readback"
+    }))?;
+    writeln!(out)?;
+    out.flush()?;
+    let (tx, rx) = sync_channel(1024);
+    let sink = Arc::new(Sink { tx, dropped: AtomicU64::new(0),
+        active: AtomicBool::new(true), knees: AtomicBool::new(knees) });
+    let worker_sink = Arc::clone(&sink);
+    std::thread::Builder::new().name("duck-diagnostic".into()).spawn(move || {
+        let result = (|| -> std::io::Result<()> {
+            let started = Instant::now();
+            let mut last_flush = Instant::now();
+            let mut records = 0u64;
+            while started.elapsed() < Duration::from_secs(seconds) {
+                if let Ok(event) = rx.recv_timeout(Duration::from_millis(200)) {
+                    write_record(&mut out, &event)?;
+                    records += 1;
+                }
+                if last_flush.elapsed() >= Duration::from_millis(200) {
+                    serde_json::to_writer(&mut out, &serde_json::json!({
+                        "kind":"trace_health", "monotonic_ns":now_ns(),"records":records,
+                        "dropped":worker_sink.dropped.load(Ordering::Relaxed)
+                    }))?;
+                    writeln!(out)?;
+                    out.flush()?;
+                    last_flush = Instant::now();
+                }
+            }
+            worker_sink.active.store(false, Ordering::Relaxed);
+            for event in rx.try_iter() { write_record(&mut out, &event)?; records += 1; }
+            serde_json::to_writer(&mut out, &serde_json::json!({
+                "kind":"end", "records":records,"dropped":worker_sink.dropped.load(Ordering::Relaxed)
+            }))?;
+            writeln!(out)?;
+            out.flush()
+        })();
+        worker_sink.active.store(false, Ordering::Relaxed);
+        if let Err(error) = result { tracing::error!(%error, "diagnostic writer stopped; capture is incomplete"); }
+    })?;
+    SINK.set(sink).map_err(|_| std::io::Error::other("diagnostic capture already started"))?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -81,7 +196,7 @@ mod tests {
     #[test]
     fn full_queue_drops_new_record_without_replacing_previous_record() {
         let (tx, rx) = sync_channel(1);
-        let sink = Sink { tx, dropped: AtomicU64::new(0), active: AtomicBool::new(true) };
+        let sink = Sink { tx, dropped: AtomicU64::new(0), active: AtomicBool::new(true), knees: AtomicBool::new(false) };
         let sample = Stamped { tick_ns: 1, event_ns: 2, event: Event::Write {
             start_ns: 1, end_ns: 2, ok: true, positions: [0.0; NUM_JOINTS] } };
         sink.try_record(sample);

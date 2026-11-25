@@ -57,8 +57,29 @@ jobs:
       # not: `padd` binds libudev through gilrs and `mediad` needs GStreamer. `robotd` pulls
       # neither, `serialport` is built with default-features off (which drops libudev), and
       # `ort` uses `load-dynamic` so no target-arch ONNX Runtime is needed at build time.
-      - name: Diagnostic recorder tests
-        run: cargo test --locked -p duck-control diagnostic::tests -- --nocapture
+      - name: Control and daemon tests
+        run: cargo test --locked -p duck-control -p robotd
+
+      - name: Format modified Rust sources
+        run: |
+          rustfmt --edition 2024 duck-control/src/diagnostic.rs duck-control/src/bus.rs robotd/src/control.rs robotd/src/main.rs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-formatted-source-${{ github.sha }}
+          path: |
+            duck-control/src/diagnostic.rs
+            duck-control/src/bus.rs
+            robotd/src/control.rs
+            robotd/src/main.rs
+
+      - name: Workspace test dependencies
+        run: |
+          sudo apt-get install -y --no-install-recommends libudev-dev libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev
+
+      - name: Workspace tests
+        run: cargo test --locked --workspace
 
       - name: cargo build -p robotd
         env:
