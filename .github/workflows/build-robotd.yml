@@ -31,6 +31,7 @@ jobs:
         with:
           toolchain: "1.89.0"
           targets: aarch64-unknown-linux-gnu
+          components: rustfmt
 
       # libc6-dev-arm64-cross supplies crti.o and the aarch64 headers. With
       # --no-install-recommends the compiler package does not pull it in on its own, and the
