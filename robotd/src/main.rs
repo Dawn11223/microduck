@@ -1256,10 +1256,13 @@ async fn main() -> ExitCode {
         .with_writer(std::io::stderr)
         .init();
 
-    if let Err(error) = duck_control::diagnostic::start_from_env() {
-        tracing::error!(%error, "diagnostic capture could not start; hardware not opened");
-        return ExitCode::FAILURE;
-    }
+    let _diagnostic_capture = match duck_control::diagnostic::start_from_env() {
+        Ok(capture) => capture,
+        Err(error) => {
+            tracing::error!(%error, "diagnostic capture could not start; hardware not opened");
+            return ExitCode::FAILURE;
+        }
+    };
 
     let explicit = args.params.is_some();
     let params_path = args
@@ -9575,7 +9578,7 @@ mod tests {
         assert_eq!(health.bus.missing, vec![32, 33, 34]);
         let reason = health.reason.unwrap();
         assert!(
-            reason.contains("servos 32 head_yaw, 33 head_roll, 34 mouth not answering"),
+            reason.contains("servos 32 head_roll, 33 head_pitch, 34 neck_pitch not answering"),
             "{reason}"
         );
         assert!(!reason.contains("servo power"), "{reason}");
@@ -9583,7 +9586,7 @@ mod tests {
         s.bus_missing.store(Arc::new(vec![13]));
         let reason = s.health().reason.unwrap();
         assert!(
-            reason.starts_with("servo 13 right_knee not answering"),
+            reason.starts_with("servo 13 right_hip_pitch not answering"),
             "{reason}"
         );
         assert!(reason.contains("is it plugged in?"), "{reason}");
@@ -10754,7 +10757,7 @@ mod tests {
         assert_eq!(health.bus.missing, vec![32, 33]);
         let reason = health.reason.unwrap();
         assert!(
-            reason.starts_with("servos 32 head_yaw, 33 head_roll not answering on the motor bus"),
+            reason.starts_with("servos 32 head_roll, 33 head_pitch not answering on the motor bus"),
             "{reason}"
         );
         assert!(reason.contains("consecutive failed reads"), "{reason}");
@@ -11462,7 +11465,7 @@ mod tests {
             .silent_hardware("after a run")
             .expect("a silent servo is named");
         assert!(
-            reason.starts_with("servo 13 right_knee not answering"),
+            reason.starts_with("servo 13 right_hip_pitch not answering"),
             "{reason}"
         );
 

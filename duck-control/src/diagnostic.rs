@@ -13,6 +13,9 @@ pub enum Event {
     BusRead { start_ns: u64, end_ns: u64, ok: bool, raw: [[u8; 12]; NUM_JOINTS + 1] },
     KneeRead { start_ns: u64, end_ns: u64, ok: bool, raw: [[u8; 32]; 2] },
     Policy { observation: [f32; OBS_LEN], action: [f32; ACTION_LEN], scale: f64, gain: u16 },
+    InferenceInput { observation: [f32; OBS_LEN] },
+    RawAction { bits: [u32; ACTION_LEN], len: usize },
+    InferenceResult { ok: bool },
     Write { start_ns: u64, end_ns: u64, ok: bool, positions: [f64; NUM_JOINTS] },
 }
 
@@ -47,6 +50,11 @@ fn write_record(out: &mut impl Write, record: &Stamped) -> std::io::Result<()> {
         Event::Policy { observation, action, scale, gain } => json!({
             "kind":"policy", "observation":observation.as_slice(),"action":action,
             "scale":scale,"gain":gain }),
+        Event::InferenceInput { observation } => json!({
+            "kind":"inference_input", "observation":observation.as_slice(),
+            "observation_bits":observation.iter().map(|v| v.to_bits()).collect::<Vec<_>>() }),
+        Event::RawAction { bits, len } => json!({"kind":"raw_action","bits":bits,"len":len}),
+        Event::InferenceResult { ok } => json!({"kind":"inference_result","ok":ok}),
         Event::Write { start_ns, end_ns, ok, positions } => json!({
             "kind":"write", "start_ns":start_ns,"end_ns":end_ns,"ok":ok,"positions":positions }),
     };
@@ -89,18 +97,26 @@ pub struct Capture {
     worker: Option<std::thread::JoinHandle<()>>,
 }
 
+impl Drop for Capture {
+    fn drop(&mut self) {
+        // main retains this guard until after the control thread has joined. No more
+        // producers remain, so draining after the flag is cleared includes the final tick.
+        self.sink.active.store(false, Ordering::Relaxed);
+        if let Some(worker) = self.worker.take() { let _ = worker.join(); }
+    }
+}
+
 /// Called before hardware is opened. Absent DUCK_TRACE_PATH is the ordinary production path.
 /// Files must be new; an old capture is never overwritten. Serialization and disk writes all
 /// happen on the worker. The control thread only copies fixed arrays into a bounded queue.
-pub fn start_from_env() -> std::io::Result<()> {
-    let Some(path) = std::env::var_os("DUCK_TRACE_PATH") else { return Ok(()); };
+pub fn start_from_env() -> std::io::Result<Option<Capture>> {
+    let Some(path) = std::env::var_os("DUCK_TRACE_PATH") else { return Ok(None); };
     let seconds = std::env::var("DUCK_TRACE_SECONDS").ok()
         .and_then(|s| s.parse::<u64>().ok()).unwrap_or(900).clamp(1, 3600);
     let knees = std::env::var("DUCK_TRACE_KNEES").is_ok_and(|v| v == "1");
     let (capture, sink) = start_capture(std::path::Path::new(&path), seconds, knees)?;
     SINK.set(sink).map_err(|_| std::io::Error::other("diagnostic capture already started"))?;
-    drop(capture);
-    Ok(())
+    Ok(Some(capture))
 }
 
 fn start_capture(path: &std::path::Path, seconds: u64, knees: bool) -> std::io::Result<(Capture, Arc<Sink>)> {
@@ -114,7 +130,9 @@ fn start_capture(path: &std::path::Path, seconds: u64, knees: bool) -> std::io::
         "raw_bus_address":124,"raw_bus_length":12,
         "knee_ids":[12,22],"knee_address":116,"knee_length":32,
         "knees_enabled":knees, "duration_s":seconds,
-        "write_ok_means":"host transmission succeeded; knee Goal is independent readback"
+        "write_ok_means":"host transmission succeeded; knee Goal is independent readback",
+        "policy_gain_means":"requested gain; retain IPC and journal for apply errors",
+        "raw_action_bits_means":"first 14 f32 bit patterns before validation; len is true output length"
     }))?;
     writeln!(out)?;
     out.flush()?;
@@ -127,7 +145,7 @@ fn start_capture(path: &std::path::Path, seconds: u64, knees: bool) -> std::io::
             let started = Instant::now();
             let mut last_flush = Instant::now();
             let mut records = 0u64;
-            while started.elapsed() < Duration::from_secs(seconds) {
+            while worker_sink.active.load(Ordering::Relaxed) && started.elapsed() < Duration::from_secs(seconds) {
                 if let Ok(event) = rx.recv_timeout(Duration::from_millis(200)) {
                     write_record(&mut out, &event)?;
                     records += 1;

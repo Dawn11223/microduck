@@ -65,7 +65,7 @@ jobs:
 
       - name: Format modified Rust sources
         run: |
-          rustfmt --edition 2024 duck-control/src/diagnostic.rs duck-control/src/bus.rs robotd/src/control.rs robotd/src/main.rs
+          rustfmt --edition 2024 duck-control/src/diagnostic.rs duck-control/src/bus.rs duck-control/src/policy.rs robotd/src/control.rs robotd/src/main.rs
 
       - uses: actions/upload-artifact@v4
         with:
@@ -73,6 +73,7 @@ jobs:
           path: |
             duck-control/src/diagnostic.rs
             duck-control/src/bus.rs
+            duck-control/src/policy.rs
             robotd/src/control.rs
             robotd/src/main.rs
 
