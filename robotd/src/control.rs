@@ -717,8 +717,13 @@ impl Controller {
 
         if duck_control::diagnostic::enabled() {
             duck_control::diagnostic::record(duck_control::diagnostic::Event::Policy {
-                observation: observation.as_slice().try_into().expect("fixed observation width"),
-                action, scale, gain,
+                observation: observation
+                    .as_slice()
+                    .try_into()
+                    .expect("fixed observation width"),
+                action,
+                scale,
+                gain,
             });
         }
 

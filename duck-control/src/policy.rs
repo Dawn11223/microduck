@@ -362,12 +362,17 @@ impl Policy {
         }
         if crate::diagnostic::enabled() {
             crate::diagnostic::record(crate::diagnostic::Event::InferenceInput {
-                observation: observation.as_slice().try_into().expect("fixed observation width"),
+                observation: observation
+                    .as_slice()
+                    .try_into()
+                    .expect("fixed observation width"),
             });
         }
         let result = network.run(observation);
         if crate::diagnostic::enabled() {
-            crate::diagnostic::record(crate::diagnostic::Event::InferenceResult { ok: result.is_ok() });
+            crate::diagnostic::record(crate::diagnostic::Event::InferenceResult {
+                ok: result.is_ok(),
+            });
         }
         // Never carry a failed inference's state into another control tick.
         if result.is_err() {
@@ -504,7 +509,9 @@ impl Network {
             .map_err(|e| fail(e.to_string()))?;
         if crate::diagnostic::enabled() {
             crate::diagnostic::record(crate::diagnostic::Event::RawAction {
-                bits: std::array::from_fn(|i| actions.get(i).copied().unwrap_or(f32::NAN).to_bits()),
+                bits: std::array::from_fn(|i| {
+                    actions.get(i).copied().unwrap_or(f32::NAN).to_bits()
+                }),
                 len: actions.len(),
             });
         }

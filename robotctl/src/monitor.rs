@@ -4129,7 +4129,7 @@ mod tests {
         let health = proto::HealthResult {
             healthy: false,
             degraded: true,
-            reason: Some("servos 32 head_yaw, 33 head_roll, 34 mouth not answering".to_owned()),
+            reason: Some("servos 32 head_roll, 33 head_pitch, 34 neck_pitch not answering".to_owned()),
             bus: proto::BusHealth {
                 startup_failures: 3,
                 missing: vec![32, 33, 34],
@@ -4148,7 +4148,7 @@ mod tests {
         assert!(screen.contains("20 ✓"), "{screen}");
         assert!(screen.contains("32 ✗"), "{screen}");
         assert!(
-            screen.contains("missing: 32 head_yaw, 33 head_roll, 34 mouth"),
+            screen.contains("missing: 32 head_roll, 33 head_pitch, 34 neck_pitch"),
             "{screen}"
         );
     }

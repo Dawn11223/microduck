@@ -7931,7 +7931,7 @@ mod tests {
             None,
         ));
         assert!(
-            out.contains("missing 32 head_yaw, 33 head_roll, 34 mouth, 4 attempts"),
+            out.contains("missing 32 head_roll, 33 head_pitch, 34 neck_pitch, 4 attempts"),
             "{out}"
         );
         assert!(!out.contains("waiting for a robot to answer"), "{out}");

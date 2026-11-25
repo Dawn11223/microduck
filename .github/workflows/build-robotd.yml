@@ -84,7 +84,7 @@ jobs:
             libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev
 
       - name: Workspace tests
-        run: cargo test --locked --workspace
+        run: cargo test --locked --workspace --no-fail-fast
 
       - name: cargo build -p robotd
         env:

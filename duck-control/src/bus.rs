@@ -664,23 +664,34 @@ pub fn replacement_target(missing: &[u8]) -> Option<u8> {
 impl RobotIo for DynamixelIo {
     fn read(&mut self) -> Result<Sensors> {
         let tracing = crate::diagnostic::enabled();
-        let read_start = if tracing { crate::diagnostic::now_ns() } else { 0 };
+        let read_start = if tracing {
+            crate::diagnostic::now_ns()
+        } else {
+            0
+        };
         let blocks = self
             .controller
             .sync_read_raw_data(&self.ids, READ_ADDR, READ_LEN);
         if tracing {
             let end_ns = crate::diagnostic::now_ns();
-            let valid = blocks.as_ref().is_ok_and(|b| b.len() == NUM_JOINTS + 1
-                && b.iter().all(|block| block.len() == READ_LEN as usize));
+            let valid = blocks.as_ref().is_ok_and(|b| {
+                b.len() == NUM_JOINTS + 1 && b.iter().all(|block| block.len() == READ_LEN as usize)
+            });
             let mut raw = [[0; 12]; NUM_JOINTS + 1];
             if valid {
-                for (dest, src) in raw.iter_mut().zip(blocks.as_ref().unwrap()) { dest.copy_from_slice(src); }
+                for (dest, src) in raw.iter_mut().zip(blocks.as_ref().unwrap()) {
+                    dest.copy_from_slice(src);
+                }
             }
             crate::diagnostic::record(crate::diagnostic::Event::BusRead {
-                start_ns: read_start, end_ns, ok: valid, raw,
+                start_ns: read_start,
+                end_ns,
+                ok: valid,
+                raw,
             });
         }
-        let blocks = blocks.map_err(|e| IoError::Bus(format!("combined imu+motor sync_read: {e}")))?;
+        let blocks =
+            blocks.map_err(|e| IoError::Bus(format!("combined imu+motor sync_read: {e}")))?;
 
         if blocks.len() != self.ids.len() {
             return Err(IoError::ShortRead {
@@ -739,28 +750,45 @@ impl RobotIo for DynamixelIo {
             let start_ns = crate::diagnostic::now_ns();
             let blocks = self.controller.sync_read_raw_data(&[12, 22], 116, 32);
             let end_ns = crate::diagnostic::now_ns();
-            let valid = blocks.as_ref().is_ok_and(|b| b.len() == 2 && b.iter().all(|block| block.len() == 32));
+            let valid = blocks
+                .as_ref()
+                .is_ok_and(|b| b.len() == 2 && b.iter().all(|block| block.len() == 32));
             let mut raw = [[0; 32]; 2];
             if valid {
-                for (dest, src) in raw.iter_mut().zip(blocks.as_ref().unwrap()) { dest.copy_from_slice(src); }
+                for (dest, src) in raw.iter_mut().zip(blocks.as_ref().unwrap()) {
+                    dest.copy_from_slice(src);
+                }
             } else {
                 crate::diagnostic::disable_knee_reads();
                 tracing::warn!("optional knee trace read failed; further extra reads disabled");
             }
-            crate::diagnostic::record(crate::diagnostic::Event::KneeRead { start_ns, end_ns, ok: valid, raw });
+            crate::diagnostic::record(crate::diagnostic::Event::KneeRead {
+                start_ns,
+                end_ns,
+                ok: valid,
+                raw,
+            });
         }
         Ok(sensors)
     }
 
     fn write(&mut self, targets: &JointTargets) -> Result<()> {
         let tracing = crate::diagnostic::enabled();
-        let start_ns = if tracing { crate::diagnostic::now_ns() } else { 0 };
-        let result = self.controller
+        let start_ns = if tracing {
+            crate::diagnostic::now_ns()
+        } else {
+            0
+        };
+        let result = self
+            .controller
             .sync_write_goal_position(&JOINT_IDS, &targets.positions)
             .map_err(|e| IoError::Bus(format!("sync_write goal positions: {e}")));
         if tracing {
             crate::diagnostic::record(crate::diagnostic::Event::Write {
-                start_ns, end_ns: crate::diagnostic::now_ns(), ok: result.is_ok(), positions: targets.positions,
+                start_ns,
+                end_ns: crate::diagnostic::now_ns(),
+                ok: result.is_ok(),
+                positions: targets.positions,
             });
         }
         result
