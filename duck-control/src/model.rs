@@ -295,18 +295,21 @@ pub fn homing_offset(id: u8) -> i32 {
         // 83.6 / 0.0 / 117.1). The 108 counts were a stale fold, not load sag: a sagging joint
         // draws current, and this one read 0 mA.
         //
-        // `13` was deliberately **not** changed. The operator re-fitted that servo's horn by
-        // "90 degrees" so the offset could be re-folded into range, but the re-fit only moved
-        // its zero by 117 counts (10.3 deg) — measured: the home pose read Present 2468 before
-        // and 2351 after, both with the legs verified by forward kinematics. So −1049 is no
-        // longer needed, but −928 already *is* the right value: it puts the nominal stance at
-        // Present 2351 against HOME 2347, 4 counts out, and the legs' geometry is exact. Writing
-        // the −25 that the "90 degrees = 1024 counts" arithmetic predicts would put Present at
-        // 3254, i.e. 78 degrees off HOME, and the policy would see a stance that does not exist.
+        // **ID 13 is −25 by the operator's explicit instruction (2026-11-25), against measured
+        // evidence that it is wrong.** Recorded here so nobody later reads this table as
+        // calibrated. The measurements: with the legs verified at the nominal stance by forward
+        // kinematics, servo 13's raw position (Present − H) is 3279 counts. At H = −25 that puts
+        // Present at 3254, i.e. **+907 counts (+78.2 deg) away from HOME**, and the policy's
+        // joint-position observation (`obs[6..20]` is `present − home`) will report that 78 deg
+        // on every tick. The value it replaces, −928, put the same stance 4 counts from HOME.
+        // The operator's reasoning was that re-fitting the horn by 90 degrees should let the
+        // −1049 fold land inside ±1024 and leave +25; the re-fit actually moved the zero by
+        // 117 counts, not 1024, which is why −928 was already correct. See
+        // 板端配置变更记录 §36.2 for the full trace and how to revert.
         10 => 85,   // left_hip_yaw
         11 => 10,   // left_hip_roll    (re-dialled from the operator's stance)
         12 => 560,  // right_knee
-        13 => -928, // right_hip_pitch  (re-dialled from the operator's stance; re-fit verified)
+        13 => -25,  // right_hip_pitch  (operator instruction; 78.2 deg off HOME -- see above)
         14 => -2,   // left_ankle
         20 => 30,   // right_hip_yaw
         21 => 1,    // right_hip_roll   (re-dialled from the operator's stance)
