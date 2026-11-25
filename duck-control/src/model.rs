@@ -286,16 +286,33 @@ pub fn homing_offset(id: u8) -> i32 {
         // Re-dialled on 2026-11-24 on the operator's stance: 11 +163 → +10, 13 −1060 → −928,
         // 21 −196 → +1, 23 +142 → −81. Those four were dialled holds (Goal tracked Present, so
         // commanded, not load sag) of +13.4, −11.0, −16.7 and +18.6 degrees.
+        //
+        // **Right ankle re-folded +5 → +113 on 2026-11-25, against the operator's stance with
+        // the duck's own legs as the reference.** The left ankle read −9 counts from HOME while
+        // the right read −108 at the same instant, and the feet were 1.6 mm fore-aft; after the
+        // fold the right ankle holds HOME to 0 counts and the forward kinematics moved from
+        // 83.3 / +1.6 / 117.3 to the same numbers with the right foot at x = +0.0004 m (nominal
+        // 83.6 / 0.0 / 117.1). The 108 counts were a stale fold, not load sag: a sagging joint
+        // draws current, and this one read 0 mA.
+        //
+        // `13` was deliberately **not** changed. The operator re-fitted that servo's horn by
+        // "90 degrees" so the offset could be re-folded into range, but the re-fit only moved
+        // its zero by 117 counts (10.3 deg) — measured: the home pose read Present 2468 before
+        // and 2351 after, both with the legs verified by forward kinematics. So −1049 is no
+        // longer needed, but −928 already *is* the right value: it puts the nominal stance at
+        // Present 2351 against HOME 2347, 4 counts out, and the legs' geometry is exact. Writing
+        // the −25 that the "90 degrees = 1024 counts" arithmetic predicts would put Present at
+        // 3254, i.e. 78 degrees off HOME, and the policy would see a stance that does not exist.
         10 => 85,   // left_hip_yaw
         11 => 10,   // left_hip_roll    (re-dialled from the operator's stance)
         12 => 560,  // right_knee
-        13 => -928, // right_hip_pitch  (re-dialled from the operator's stance)
+        13 => -928, // right_hip_pitch  (re-dialled from the operator's stance; re-fit verified)
         14 => -2,   // left_ankle
         20 => 30,   // right_hip_yaw
         21 => 1,    // right_hip_roll   (re-dialled from the operator's stance)
         22 => -495, // left_knee
         23 => -81,  // left_hip_pitch   (re-dialled from the operator's stance)
-        24 => 5,    // right_ankle
+        24 => 113,  // right_ankle      (re-folded 2026-11-25; was +5)
         // Head chain: IDs are wired differently from the official build — see [`JOINT_IDS`].
         //
         // **Both pitch joints were mounted backwards** (found 2026-11-24 with
