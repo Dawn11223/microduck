@@ -84,6 +84,11 @@ pub fn record(event: Event) {
     }
 }
 
+pub struct Capture {
+    sink: Arc<Sink>,
+    worker: Option<std::thread::JoinHandle<()>>,
+}
+
 /// Called before hardware is opened. Absent DUCK_TRACE_PATH is the ordinary production path.
 /// Files must be new; an old capture is never overwritten. Serialization and disk writes all
 /// happen on the worker. The control thread only copies fixed arrays into a bounded queue.
@@ -92,6 +97,13 @@ pub fn start_from_env() -> std::io::Result<()> {
     let seconds = std::env::var("DUCK_TRACE_SECONDS").ok()
         .and_then(|s| s.parse::<u64>().ok()).unwrap_or(900).clamp(1, 3600);
     let knees = std::env::var("DUCK_TRACE_KNEES").is_ok_and(|v| v == "1");
+    let (capture, sink) = start_capture(std::path::Path::new(&path), seconds, knees)?;
+    SINK.set(sink).map_err(|_| std::io::Error::other("diagnostic capture already started"))?;
+    drop(capture);
+    Ok(())
+}
+
+fn start_capture(path: &std::path::Path, seconds: u64, knees: bool) -> std::io::Result<(Capture, Arc<Sink>)> {
     let file = OpenOptions::new().write(true).create_new(true).open(path)?;
     let mut out = BufWriter::with_capacity(256 * 1024, file);
     serde_json::to_writer(&mut out, &serde_json::json!({
@@ -110,7 +122,7 @@ pub fn start_from_env() -> std::io::Result<()> {
     let sink = Arc::new(Sink { tx, dropped: AtomicU64::new(0),
         active: AtomicBool::new(true), knees: AtomicBool::new(knees) });
     let worker_sink = Arc::clone(&sink);
-    std::thread::Builder::new().name("duck-diagnostic".into()).spawn(move || {
+    let worker = std::thread::Builder::new().name("duck-diagnostic".into()).spawn(move || {
         let result = (|| -> std::io::Result<()> {
             let started = Instant::now();
             let mut last_flush = Instant::now();
@@ -141,14 +153,28 @@ pub fn start_from_env() -> std::io::Result<()> {
         worker_sink.active.store(false, Ordering::Relaxed);
         if let Err(error) = result { tracing::error!(%error, "diagnostic writer stopped; capture is incomplete"); }
     })?;
-    SINK.set(sink).map_err(|_| std::io::Error::other("diagnostic capture already started"))?;
-    Ok(())
+    Ok((Capture { sink: Arc::clone(&sink), worker: Some(worker) }, sink))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::mpsc::TryRecvError;
+
+    #[test]
+    fn shutdown_drains_queued_records_and_finalizes_before_returning() {
+        let path = std::env::temp_dir().join(format!("duck-trace-{}-{}.jsonl", std::process::id(), now_ns()));
+        let (capture, sink) = start_capture(&path, 60, false).unwrap();
+        sink.try_record(Stamped { tick_ns: 12, event_ns: 34, event: Event::Write {
+            start_ns: 1, end_ns: 2, ok: true, positions: [0.25; NUM_JOINTS] } });
+        drop(capture);
+        let rows: Vec<serde_json::Value> = std::fs::read_to_string(&path).unwrap().lines()
+            .map(|line| serde_json::from_str(line).unwrap()).collect();
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(rows.last().unwrap()["kind"], "end");
+        assert_eq!(rows.last().unwrap()["records"], 1);
+        assert_eq!(rows[1]["event"]["positions"][14], 0.25);
+    }
 
     fn value(event: Event) -> serde_json::Value {
         let mut bytes = Vec::new();

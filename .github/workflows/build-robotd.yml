@@ -57,6 +57,9 @@ jobs:
       # not: `padd` binds libudev through gilrs and `mediad` needs GStreamer. `robotd` pulls
       # neither, `serialport` is built with default-features off (which drops libudev), and
       # `ort` uses `load-dynamic` so no target-arch ONNX Runtime is needed at build time.
+      - name: Diagnostic recorder tests
+        run: cargo test --locked -p duck-control diagnostic::tests
+
       - name: Control and daemon tests
         run: cargo test --locked -p duck-control -p robotd
 
